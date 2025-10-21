@@ -1,81 +1,49 @@
-// loadData.js
+const fs = require('fs');
+const path = require('path');
+const iconv = require('iconv-lite');
+const csvParse = require('csv-parse/sync');
 
-// CSV loader that works both inside R7‑Office (Api available) and in Node.js
-function loadCSV(filePath) {
-    // R7‑Office macro environment
-    if (typeof Api !== 'undefined' && Api && Api.Worksheet && typeof Api.Worksheet.importCSV === 'function') {
-        try {
-            const fileContent = Api.Worksheet.importCSV(filePath, {
-                delimiter: ';',
-                encoding: 'UTF-8'
-            });
-            return fileContent;
-        } catch (error) {
-            console.error('Error loading CSV via Api.Worksheet.importCSV:', error);
-            return null;
-        }
+function detectDelimiter(sample) {
+    // Count common delimiters in the header line
+    const line = sample.split(/\r?\n/).find(l => l && l.trim().length > 0) || '';
+    const counts = {
+        ';': (line.match(/;/g) || []).length,
+        ',': (line.match(/,/g) || []).length,
+        '\t': (line.match(/\t/g) || []).length
+    };
+    // Pick the delimiter with the highest count; default to ';' for RU CSV
+    let best = ';';
+    let max = -1;
+    for (const [delim, cnt] of Object.entries(counts)) {
+        if (cnt > max) { max = cnt; best = delim === '\\t' ? '\t' : delim; }
     }
+    return best;
+}
 
-    // Node.js fallback: read from filesystem and parse semicolon‑separated CSV
+function loadCSV(filePath, headerMap = {}) {
     try {
-        const fs = require('fs');
-        const raw = fs.readFileSync(filePath, 'utf8');
-        return parseSemicolonCSV(raw);
-    } catch (err) {
-        console.error('Error loading CSV from filesystem:', err);
+        const rawData = fs.readFileSync(filePath);
+        // Try UTF-8 first and strip BOM if present
+        let decodedData = iconv.decode(rawData, 'utf-8');
+        decodedData = decodedData.replace(/^\uFEFF/, '');
+
+        // Detect delimiter based on the first non-empty line
+        const delimiter = detectDelimiter(decodedData);
+
+        const records = csvParse.parse(decodedData, {
+            columns: (headers) => headers.map(header => {
+                const normalizedHeader = String(header).replace(/^\uFEFF/, '').trim().toLowerCase();
+                return headerMap[normalizedHeader] || normalizedHeader;
+            }),
+            delimiter,
+            skip_empty_lines: true,
+            trim: true
+        });
+        return records;
+    } catch (error) {
+        console.error(`❌ Failed to load CSV: ${filePath}`, error);
         return null;
     }
-}
-
-// Very small CSV parser for semicolon‑delimited files with a header row.
-function parseSemicolonCSV(text) {
-    if (!text) return [];
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-    if (lines.length === 0) return [];
-    const headers = splitRow(lines[0]);
-    const rows = [];
-    for (let i = 1; i < lines.length; i++) {
-        const cols = splitRow(lines[i]);
-        const obj = {};
-        for (let j = 0; j < headers.length; j++) {
-            obj[headers[j]] = cols[j] !== undefined ? cols[j] : '';
-        }
-        rows.push(obj);
-    }
-    return rows;
-}
-
-// Splits a line by semicolons, honoring simple quoted values
-function splitRow(line) {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') {
-            // Toggle quote state or handle escaped quotes
-            if (inQuotes && line[i + 1] === '"') {
-                current += '"';
-                i++; // skip next
-            } else {
-                inQuotes = !inQuotes;
-            }
-        } else if (ch === ';' && !inQuotes) {
-            result.push(current);
-            current = '';
-        } else {
-            current += ch;
-        }
-    }
-    result.push(current);
-    // Trim surrounding quotes
-    return result.map(v => {
-        const trimmed = v.trim();
-        if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-            return trimmed.slice(1, -1);
-        }
-        return trimmed;
-    });
 }
 
 module.exports = { loadCSV };

@@ -1,43 +1,46 @@
-// cleanSalesData.js
+const moment = require('moment');
 
-// Safe helpers
-const sanitizeInt = (value) => {
-  if (value === undefined || value === null) return 0;
-  if (typeof value === 'number') return value | 0;
-  const cleaned = String(value).replace(/[^\d-]/g, '');
-  const n = parseInt(cleaned, 10);
-  return Number.isFinite(n) ? n : 0;
-};
+function toNumber(val) {
+  if (val === null || val === undefined) return null;
+  const s = String(val).replace(/\u00A0/g, ' ').replace(/\s+/g, '').replace(',', '.');
+  if (s === '') return null;
+  const n = Number(s);
+  return Number.isNaN(n) ? null : n;
+}
 
-const stripBomAndTrim = (s) => (typeof s === 'string' ? s.replace(/^\uFEFF/, '').trim() : s);
+function formatRUDate(dateStr) {
+  if (!dateStr) return null;
+  const formats = ['DD-MM-YYYY', 'YYYY-MM-DD', 'DD.MM.YYYY'];
+  for (const f of formats) {
+    const m = moment(dateStr, f, true);
+    if (m.isValid()) return m.format('DD.MM.YYYY');
+  }
+  return null;
+}
 
-const getField = (row, canonicalName) => {
-  // exact
-  if (row[canonicalName] !== undefined) return row[canonicalName];
-  // try BOM/whitespace/case-insensitive match
-  const key = Object.keys(row).find(
-    (k) => stripBomAndTrim(k).toLowerCase() === canonicalName.toLowerCase()
-  );
-  return key ? row[key] : undefined;
-};
+function cleanSalesData(salesData) {
+  return (salesData || []).map(row => {
+    // Expect english keys from harmonizeSalesHeaders in main.js
+    const id = row.ID ?? null;
+    const date = formatRUDate(row.Date);
+    const product = row.Product ?? null;
+    const qty = toNumber(row.Quantity);
+    const price = toNumber(row.Price);
+    const sum = qty != null && price != null ? qty * price : null;
 
-// Main cleaner
-function cleanSalesData(rows) {
-  return (rows || [])
-    .filter((r) => r && Object.keys(r).length > 0)
-    .map((raw) => {
-      const row = { ...raw };
-
-      // Normalize and set Количество safely
-      const qtyRaw = getField(row, 'Количество');
-      row['Количество'] = sanitizeInt(qtyRaw);
-
-      // Optionally normalize other numeric fields if present
-      // const priceRaw = getField(row, 'Цена');
-      // row['Цена'] = sanitizeFloat(priceRaw);
-
-      return row;
-    });
+    return {
+      ID: id,
+      Date: date,
+      Manager: row.Manager ?? null,
+      City: row.City ?? null,
+      Product: product,
+      Quantity: qty,
+      Price: price,
+      Sum: sum,
+      Type: row.Type ?? null,
+      PaymentMethod: row.PaymentMethod ?? null
+    };
+  });
 }
 
 module.exports = { cleanSalesData };

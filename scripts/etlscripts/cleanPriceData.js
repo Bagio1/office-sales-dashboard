@@ -1,43 +1,33 @@
-// cleanPriceData.js
+function normalizeKey(key) {
+  return key ? String(key).trim().toLowerCase().replace(/\uFEFF/g, '').replace(/[^a-zа-яё0-9]/gi, '') : null;
+}
 
-// Helpers
-const stripBomAndTrim = (s) => (typeof s === 'string' ? s.replace(/^\uFEFF/, '').trim() : s);
+function toNumber(val) {
+  if (val === null || val === undefined) return null;
+  const s = String(val).replace(/\u00A0/g, ' ').replace(/\s+/g, '').replace(',', '.');
+  if (s === '') return null;
+  const n = Number(s);
+  return Number.isNaN(n) ? null : n;
+}
 
-const getField = (row, canonicalName) => {
-    if (!row) return undefined;
-    if (row[canonicalName] !== undefined) return row[canonicalName];
-    const key = Object.keys(row).find(
-        (k) => stripBomAndTrim(k).toLowerCase() === String(canonicalName).toLowerCase()
-    );
-    return key ? row[key] : undefined;
-};
-
-const sanitizeFloat = (value) => {
-    if (value === undefined || value === null || value === '') return 0;
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    let s = String(value).trim();
-    // Allow digits, dots and commas; remove others
-    s = s.replace(/[^0-9.,-]/g, '');
-    // If both comma and dot exist, assume comma is thousand sep: remove commas
-    if (s.includes(',') && s.includes('.')) {
-        s = s.replace(/,/g, '');
-    } else if (s.includes(',')) {
-        // Treat comma as decimal separator
-        s = s.replace(/,/g, '.');
+function cleanPriceData(priceData) {
+  const dict = {};
+  (priceData || []).forEach(row => {
+    // Support either combined string or separate columns
+    if (row['productprice']) {
+      const [_, productName, price] = String(row['productprice']).split(',');
+      if (productName && price) {
+        dict[normalizeKey(productName)] = toNumber(price);
+      }
+      return;
     }
-    const n = parseFloat(s);
-    return Number.isFinite(n) ? n : 0;
-};
-
-function cleanPriceData(rows) {
-    return (rows || [])
-        .filter((r) => r && Object.keys(r).length > 0)
-        .map((raw) => {
-            const row = { ...raw };
-            const priceRaw = getField(row, 'Цена');
-            row['Цена'] = sanitizeFloat(priceRaw);
-            return row;
-        });
+    const name = row['product_name'] || row['товар'] || row['наименование'] || row['product'];
+    const price = row['price'] || row['цена'];
+    if (name && price != null) {
+      dict[normalizeKey(name)] = toNumber(price);
+    }
+  });
+  return dict;
 }
 
 module.exports = { cleanPriceData };

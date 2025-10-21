@@ -1,5 +1,16 @@
 {
   "title": "Sales Dashboard",
   "currency": "RUB",
-  "topManagersCount": 3
+  "topManagersCount": 3,
+  "defaults": {
+    "manager": "Ivanov I.",
+    "city": "Moscow"
+  },
+  "fallbackPrices": {
+    "Картошка фри": 0.5,
+    "Бургеры": 0.6,
+    "Куриные сэндвичи": 0.9,
+    "Напитки": 0.4,
+    "Гарниры и прочее": 0.3
+  }
 }

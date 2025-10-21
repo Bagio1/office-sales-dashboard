@@ -1,29 +1,23 @@
-// cleanManagersData.js
-
-const stripBomAndTrim = (s) => (typeof s === 'string' ? s.replace(/^\uFEFF/, '').trim() : '');
-const getField = (row, name) => {
-  if (row && row[name] !== undefined) return row[name];
-  const key = Object.keys(row || {}).find(
-    (k) => stripBomAndTrim(k).toLowerCase() === String(name).toLowerCase()
-  );
-  return key ? row[key] : undefined;
-};
-
-function cleanManagersData(rows) {
-  return (rows || [])
-    .filter((r) => r && Object.keys(r).length > 0)
-    .map((raw) => {
-      const row = { ...raw };
-
-      // Safely normalize manager name
-      const nameRaw = getField(row, 'Менеджер');
-      const name = stripBomAndTrim(nameRaw || '');
-      row['Менеджер'] = name;
-
-      return row;
-    })
-    // Drop rows without a manager name
-    .filter((r) => r['Менеджер'] !== '');
+function cleanManagersData(managersData) {
+  return (managersData || []).map(row => {
+    // Accept multiple possible columns: manager_name (en), фио (ru), manager
+    const raw = row['manager_name'] || row['фио'] || row['manager'] || '';
+    const parts = String(raw).trim().split(/\s+/);
+    let surname = '', nameInitial = '';
+    if (parts.length >= 2) {
+      // Assume "Name Surname" or "Surname Name" -> pick last as surname
+      surname = parts[parts.length - 1];
+      const name = parts[0];
+      nameInitial = name ? (name[0] + '.').toUpperCase() : '';
+    } else if (parts.length === 1) {
+      surname = parts[0];
+    }
+    const managerAbbr = `${surname} ${nameInitial}`.trim();
+    return {
+      Manager: managerAbbr || null,
+      City: row['region'] || row['город'] || null
+    };
+  });
 }
 
 module.exports = { cleanManagersData };
